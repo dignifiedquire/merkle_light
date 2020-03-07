@@ -779,6 +779,37 @@ fn test_from_iter() {
 }
 
 #[test]
+fn test_root_from_iter() {
+    let mut a = XOR128::new();
+
+    let root = MerkleTree::<[u8; 16], XOR128, VecStore<_>>::try_root_from_iter(
+        ["a", "b", "c", "d"].iter().map(|x| {
+            a.reset();
+            x.hash(&mut a);
+            Ok(a.hash())
+        }),
+    )
+    .unwrap();
+    assert_eq!(root, [1, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn test_root_from_iter_large() {
+    let mut a = XOR128::new();
+    let count = SMALL_TREE_BUILD * SMALL_TREE_BUILD * 128;
+
+    let root =
+        MerkleTree::<[u8; 16], XOR128, MmapStore<_>>::try_root_from_iter((0..count).map(|x| {
+            a.reset();
+            x.hash(&mut a);
+            93.hash(&mut a);
+            Ok(a.hash())
+        }))
+        .unwrap();
+    assert_eq!(root, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
 fn test_simple_tree() {
     let answer: Vec<Vec<[u8; 16]>> = vec![
         vec![

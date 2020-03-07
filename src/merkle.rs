@@ -789,6 +789,69 @@ impl<T: Element, A: Algorithm<T>, K: Store<T>, U: Unsigned> FromIndexedParallelI
 }
 
 impl<T: Element, A: Algorithm<T>, K: Store<T>, U: Unsigned> MerkleTree<T, A, K, U> {
+    /// Attempts to calculate the root hash of a new merkle tree using hashable objects yielded by
+    /// the provided iterator. This method returns the first error yielded by the iterator, if the
+    /// iterator yielded an error.
+    pub fn try_root_from_iter<I: IntoIterator<Item = Result<T>>>(into: I) -> Result<T> {
+        let iter = into.into_iter();
+
+        let (_, n) = iter.size_hint();
+        let leafs = n.ok_or_else(|| anyhow!("could not get size hint from iterator"))?;
+        let branches = U::to_usize();
+        ensure!(leafs > 1, "not enough leaves");
+        ensure!(next_pow2(leafs) == leafs, "size MUST be a power of 2");
+        ensure!(
+            next_pow2(branches) == branches,
+            "branches MUST be a power of 2"
+        );
+
+        let height = get_merkle_tree_height(leafs, branches);
+
+        // tmp_nodes is a two-dimensional vector, where the first dimension is the level of the
+        // tree (`0` are the leaves). The second dimension is a fixed sized buffer that is the
+        // same size as the branching factor, as it holds the temporary nodes for the current
+        // level.
+        let mut tmp_nodes = Vec::with_capacity(height);
+        (0..height).for_each(|_| {
+            // TODO vmx 2020-02-27: It should be possible to use GenericArray to create the per
+            // level buffers
+            let level_buffer: Vec<T> = Vec::with_capacity(branches);
+            tmp_nodes.push(level_buffer)
+        });
+
+        for leaf in iter {
+            // Leaf nodes need some processing
+            let mut item = A::default().leaf(leaf?);
+
+            let mut level = 0;
+            loop {
+                // There is still enough space within the current node
+                if tmp_nodes[level].len() < branches - 1 {
+                    tmp_nodes[level].push(item);
+                    break;
+                }
+                // The node becomes full when adding the current item
+                else {
+                    // Add the current item, now the node is full
+                    tmp_nodes[level].push(item);
+
+                    // Hash the node to put the result into its parent
+                    // NOTE vmx 2020-02-27: Last parameter isn't used, hence using `0`
+                    item = A::default().multi_node(&tmp_nodes[level], 0);
+                    // Clear the node
+                    tmp_nodes[level].clear();
+                    // Move on to the parent level
+                    level += 1;
+                }
+            }
+        }
+
+        let root = tmp_nodes[height - 1]
+            .pop()
+            .context("failed to calculate root node")?;
+        Ok(root)
+    }
+
     /// Attempts to create a new merkle tree using hashable objects yielded by
     /// the provided iterator. This method returns the first error yielded by
     /// the iterator, if the iterator yielded an error.
