@@ -18,7 +18,11 @@
 - linear memory layout, no nodes on heap
 - buildable from iterator, objects or hashes
 - certificate transparency style merkle hashing support
-- SPV included
+- SPV support included (via proof type)
+- supports power of 2 arity merkletrees (only)
+- supports compound merkletrees (a tree of merkletrees)
+- supports compound-compound merkletrees (a tree of compound merkletrees)
+
 
 ## Documentation
 
@@ -26,79 +30,23 @@ Documentation is [available](https://docs.rs/merkletree).
 
 # Examples
 
-* `test_sip.rs`: algorithm implementation example for std sip hasher, u64 hash items
-* `test_xor128.rs`: custom hash example xor128
-* `test_cmh.rs`: custom merkle hasher implementation example
-* `crypto_bitcoin_mt.rs`: bitcoin merkle tree using crypto lib
-* `crypto_chaincore_mt.rs`: chain core merkle tree using crypto lib
-* `ring_bitcoin_mt.rs`: bitcoin merkle tree using ring lib
+The most relevant examples are located in the following files:
 
-# Quick start
+* `test_common.rs`: custom hash example xor128, misc shared utils
+* `test_xor128.rs`: most comprehensive tests for library features
+* `proof.rs`: contains impl and tests for proofs across pow2 arity trees
+
+# Building and testing
 
 ```
-extern crate crypto;
-extern crate merkletree;
+# Run tests in release mode
+cargo test --release --all
 
-use std::fmt;
-use std::hash::Hasher;
-use std::iter::FromIterator;
-use crypto::sha3::{Sha3, Sha3Mode};
-use crypto::digest::Digest;
-use merkletree::hash::{Algorithm, Hashable};
-use merkletree::merkle::MerkleTree;
-
-pub struct ExampleAlgorithm(Sha3);
-
-impl ExampleAlgorithm {
-    pub fn new() -> ExampleAlgorithm {
-        ExampleAlgorithm(Sha3::new(Sha3Mode::Sha3_256))
-    }
-}
-
-impl Default for ExampleAlgorithm {
-    fn default() -> ExampleAlgorithm {
-        ExampleAlgorithm::new()
-    }
-}
-
-impl Hasher for ExampleAlgorithm {
-    #[inline]
-    fn write(&mut self, msg: &[u8]) {
-        self.0.input(msg)
-    }
-
-    #[inline]
-    fn finish(&self) -> u64 {
-        unimplemented!()
-    }
-}
-
-impl Algorithm<[u8; 32]> for ExampleAlgorithm {
-    #[inline]
-    fn hash(&mut self) -> [u8; 32] {
-        let mut h = [0u8; 32];
-        self.0.result(&mut h);
-        h
-    }
-
-    #[inline]
-    fn reset(&mut self) {
-        self.0.reset();
-    }
-}
-
-fn main() {
-    let mut h1 = [0u8; 32];
-    let mut h2 = [0u8; 32];
-    let mut h3 = [0u8; 32];
-    h1[0] = 0x11;
-    h2[0] = 0x22;
-    h3[0] = 0x33;
-
-    let t: MerkleTree<[u8; 32], ExampleAlgorithm> = MerkleTree::from_iter(vec![h1, h2, h3]);
-    println!("{:?}", t.root());
-}
+# Run ignored tests in release mode
+cargo test --release --all -- --ignored
 ```
+
+
 
 ## Bug Reporting
 

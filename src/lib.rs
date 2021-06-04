@@ -1,11 +1,12 @@
 //! light _Merkle Tree_ implementation.
 //!
-//! Merkle tree (MT) implemented as a full binary tree allocated as a vec
-//! of statically sized hashes to give hashes more locality. MT specialized
-//! to the extent of hashing algorithm and hash item. [`Hashable`] trait is
+//! Merkle tree (MT) implemented as a full (power of 2) arity tree allocated as a vec
+//! of statically sized hashes to give hashes more locality (although disk based backings
+//! are supported, as a partial tree disk based backings).  MT is specialized
+//! to the extent of arity, hashing algorithm and hash item. [`Hashable`] trait is
 //! compatible to the `std::hash::Hasher` and supports custom hash algorithms.
 //! Implementation does not depend on any external crypto libraries, and tries
-//! to be as performant as possible.
+//! to be as performant as possible (CPU support only; GPU hashing currently unsupported).
 //!
 //! This tree implementation uses encoding scheme as in _Certificate Transparency_
 //! by default. Encoding scheme for leafs and nodes can be overridden though.
@@ -61,90 +62,10 @@
 //!
 //! # Examples
 //!
-//! [`test_sip.rs`]: algorithm implementation example for std sip hasher, u64 hash items
-//! [`test_xor128.rs`]: custom hash example xor128
-//! [`test_cmh.rs`]: custom merkle hasher implementation example
-//! [`crypto_bitcoin_mt.rs`]: bitcoin merkle tree using crypto lib
-//! [`crypto_chaincore_mt.rs`]: chain core merkle tree using crypto lib
-//! [`ring_bitcoin_mt.rs`]: bitcoin merkle tree using ring lib
+//! [`test_common.rs`]: custom hash example xor128, misc shared utils
+//! [`test_xor128.rs`]: most comprehensive tests for library features
+//! [`proof.rs`]: contains impl and tests for proofs across pow2 arity trees
 //!
-//! # Quick start
-//!
-//! ```
-//! #[cfg(feature = "chaincore")]
-//! extern crate crypto;
-//! extern crate merkletree;
-//!
-//! #[cfg(feature = "chaincore")]
-//! mod example {
-//!     use std::fmt;
-//!     use std::hash::Hasher;
-//!     use crypto::sha3::{Sha3, Sha3Mode};
-//!     use crypto::digest::Digest;
-//!     use merkletree::hash::{Algorithm, Hashable};
-//!
-//!     pub struct ExampleAlgorithm(Sha3);
-//!
-//!     impl ExampleAlgorithm {
-//!         pub fn new() -> ExampleAlgorithm {
-//!             ExampleAlgorithm(Sha3::new(Sha3Mode::Sha3_256))
-//!         }
-//!     }
-//!
-//!     impl Default for ExampleAlgorithm {
-//!         fn default() -> ExampleAlgorithm {
-//!             ExampleAlgorithm::new()
-//!         }
-//!     }
-//!
-//!     impl Hasher for ExampleAlgorithm {
-//!         #[inline]
-//!         fn write(&mut self, msg: &[u8]) {
-//!             self.0.input(msg)
-//!         }
-//!
-//!         #[inline]
-//!         fn finish(&self) -> u64 {
-//!             unimplemented!()
-//!         }
-//!     }
-//!
-//!     impl Algorithm<[u8; 32]> for ExampleAlgorithm {
-//!         #[inline]
-//!         fn hash(&mut self) -> [u8; 32] {
-//!             let mut h = [0u8; 32];
-//!             self.0.result(&mut h);
-//!             h
-//!         }
-//!
-//!         #[inline]
-//!         fn reset(&mut self) {
-//!             self.0.reset();
-//!         }
-//!     }
-//! }
-//!
-//! fn main() {
-//! #[cfg(feature = "chaincore")]
-//! {
-//!     use example::ExampleAlgorithm;
-//!     use merkletree::merkle::MerkleTree;
-//!     use merkletree::store::VecStore;
-//!
-//!     let mut h1 = [0u8; 32];
-//!     let mut h2 = [0u8; 32];
-//!     let mut h3 = [0u8; 32];
-//!     let mut h4 = [0u8; 32];
-//!     h1[0] = 0x11;
-//!     h2[0] = 0x22;
-//!     h3[0] = 0x33;
-//!     h4[0] = 0x44;
-//!
-//!     let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> = MerkleTree::try_from_iter(vec![h1, h2, h3, h4].into_iter().map(Ok)).unwrap();
-//!     println!("{:?}", t.root());
-//! }
-//! }
-//! ```
 
 // missing_docs,
 #![deny(
