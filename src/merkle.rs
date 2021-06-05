@@ -913,8 +913,45 @@ impl<
         Proof::new::<TopTreeArity, SubTreeArity>(Some(Box::new(sub_tree_proof)), lemma, path)
     }
 
+    /// Generate merkle tree inclusion proof for leaf `i`, but only on the base tree.
+    pub fn gen_base_proof(&self, i: usize) -> Result<Proof<E, BaseTreeArity>> {
+        match &self.data {
+            Data::BaseTree(_) => self.gen_proof(i),
+            Data::TopTree(_) => {
+                let arity = TopTreeArity::to_usize();
+                // Locate the sub-tree the leaf is contained in.
+                let tree_index = i / (self.leafs / arity);
+
+                ensure!(self.data.sub_trees().is_some(), "sub trees required");
+                let sub_trees = self.data.sub_trees().unwrap();
+                ensure!(arity == sub_trees.len(), "Top layer tree shape mis-match");
+
+                let tree = &sub_trees[tree_index];
+                let leaf_index = i % tree.leafs();
+
+                tree.gen_base_proof(leaf_index)
+            }
+            Data::SubTree(_) => {
+                let arity = SubTreeArity::to_usize();
+                // Locate the sub-tree the leaf is contained in.
+                let tree_index = i / (self.leafs / arity);
+
+                ensure!(self.data.base_trees().is_some(), "base trees required");
+                let base_trees = self.data.base_trees().unwrap();
+                ensure!(
+                    arity == base_trees.len(),
+                    "Sub tree layer tree shape mis-match"
+                );
+
+                let tree = &base_trees[tree_index];
+                let leaf_index = i % tree.leafs();
+
+                tree.gen_base_proof(leaf_index)
+            }
+        }
+    }
+
     /// Generate merkle tree inclusion proof for leaf `i`
-    #[inline]
     pub fn gen_proof(&self, i: usize) -> Result<Proof<E, BaseTreeArity>> {
         match &self.data {
             Data::TopTree(_) => self.gen_sub_tree_proof(i, true, TopTreeArity::to_usize()),
@@ -1083,6 +1120,64 @@ impl<
         // a sub-tree proof of branching factor B and a top-level
         // proof with a branching factor of SubTreeArity.
         Proof::new::<TopTreeArity, SubTreeArity>(Some(Box::new(sub_tree_proof)), lemma, path)
+    }
+
+    pub fn gen_cached_base_proof(
+        &self,
+        i: usize,
+        rows_to_discard: Option<usize>,
+    ) -> Result<Proof<E, BaseTreeArity>> {
+        match &self.data {
+            Data::TopTree(_) => {
+                let arity = TopTreeArity::to_usize();
+                ensure!(arity != 0, "Invalid top-tree arity");
+                ensure!(
+                    i < self.leafs,
+                    "{} is out of bounds (max: {})",
+                    i,
+                    self.leafs
+                ); // i in [0 .. self.leafs)
+
+                // Locate the sub-tree the leaf is contained in.
+                ensure!(self.data.sub_trees().is_some(), "sub trees required");
+                let trees = &self.data.sub_trees().unwrap();
+                let tree_index = i / (self.leafs / arity);
+                let tree = &trees[tree_index];
+                let tree_leafs = tree.leafs();
+
+                // Get the leaf index within the sub-tree.
+                let leaf_index = i % tree_leafs;
+
+                // Generate the proof that will validate to the provided
+                // sub-tree root (note the branching factor of B).
+                tree.gen_cached_base_proof(leaf_index, rows_to_discard)
+            }
+            Data::SubTree(_) => {
+                let arity = SubTreeArity::to_usize();
+                ensure!(arity != 0, "Invalid sub-tree arity");
+                ensure!(
+                    i < self.leafs,
+                    "{} is out of bounds (max: {})",
+                    i,
+                    self.leafs
+                ); // i in [0 .. self.leafs)
+
+                // Locate the sub-tree the leaf is contained in.
+                ensure!(self.data.base_trees().is_some(), "base trees required");
+                let trees = &self.data.base_trees().unwrap();
+                let tree_index = i / (self.leafs / arity);
+                let tree = &trees[tree_index];
+                let tree_leafs = tree.leafs();
+
+                // Get the leaf index within the sub-tree.
+                let leaf_index = i % tree_leafs;
+
+                // Generate the proof that will validate to the provided
+                // sub-tree root (note the branching factor of B).
+                tree.gen_cached_base_proof(leaf_index, rows_to_discard)
+            }
+            Data::BaseTree(_) => self.gen_cached_proof(i, rows_to_discard),
+        }
     }
 
     /// Generate merkle tree inclusion proof for leaf `i` by first
